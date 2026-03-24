@@ -1,61 +1,32 @@
-from connectors.connector_factory import ConnectorFactory
-from extractors.extractor_factory import ExtractorFactory
-from transformers.transformer_factory import TransformerFactory
-from loaders.loader_factory import LoaderFactory
+from etl.extractors.factory import ExtractorFactory
+from etl.transformers.factory import TransformerFactory
+from etl.loaders.factory import LoaderFactory
+import logging
 
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+if not logger.handlers:
+    ch = logging.StreamHandler()
+    formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s')
+    ch.setFormatter(formatter)
+    logger.addHandler(ch)
 
-def run_pipeline(input_data):
-    """
-    input_data example:
-    {
-        "connector": "postgres",
-        "extractor": "user",
-        "transformer": "json",
-        "loader": "opensearch",
-        "table": "students"
-    }
-    """
+class MedicalETLPipeline:
+    def __init__(self):
+        logger.info("Initializing Medical ETL Pipeline")
+        self.extractor = ExtractorFactory.create_extractor("patient")
+        self.transformer = TransformerFactory.create_transformer("json")
+        self.loader = LoaderFactory.create_loader("opensearch")
 
-    # 1️⃣ Create connector
-    connector = ConnectorFactory.create_connector(input_data["connector"])
-
-    connection = connector.connect()
-
-    # 2️⃣ Create extractor
-    extractor = ExtractorFactory.create_extractor(
-        input_data["extractor"], connection
-    )
-
-    extracted_data = extractor.extract(input_data["table"])
-
-    print("Extracted:", extracted_data)
-
-    # 3️⃣ Create transformer
-    transformer = TransformerFactory.create_transformer(
-        input_data["transformer"]
-    )
-
-    transformed_data = transformer.transform(extracted_data)
-
-    print("Transformed:", transformed_data)
-
-    # 4️⃣ Create loader
-    loader = LoaderFactory.create_loader(input_data["loader"])
-
-    response = loader.index_documents(transformed_data)
-
-    print("Loaded to OpenSearch")
-    print(response)
-
-
-if __name__ == "__main__":
-
-    input_config = {
-        "connector": "postgres",
-        "extractor": "user",
-        "transformer": "json",
-        "loader": "opensearch",
-        "table": "students"
-    }
-
-    run_pipeline(input_config)
+    def run(self):
+        try:
+            rows = self.extractor.extract()
+            logger.info(f"Extracted {len(rows)} rows")
+            documents = self.transformer.transform(rows)
+            logger.info(f"Transformed {len(documents)} documents")
+            responses = self.loader.index_documents(documents)
+            logger.info(f"Indexed {len(responses)} documents")
+        except Exception as e:
+            logger.error(f"Pipeline failed: {e}")
+            raise
+        logger.info("Pipeline finished successfully")
